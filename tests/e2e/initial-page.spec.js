@@ -38,29 +38,35 @@ test.describe('Initial Page', () => {
     await expect(page.locator('input[type="number"]').first()).toHaveValue('18')
     await expect(page.locator('input[type="number"]').last()).toHaveValue('37')
     
-    // Click process pages button
-    console.log('Clicking Process Pages button...')
-    await page.locator('button:has-text("Process Pages")').click()
+    // Click extract pages button
+    console.log('Clicking Extract Pages button...')
+    await page.locator('button:has-text("Extract Pages")').click()
     
-    // Wait a moment for any errors to surface
-    await page.waitForTimeout(1000)
+    // Wait for extraction to complete - processing might be too fast to see indicator
+    // Just wait for the Convert to SVG button to appear
+    await expect(page.locator('button:has-text("Convert to SVG")')).toBeVisible({ timeout: 30000 })
     
-    // Should show processing indicator
-    await expect(page.locator('[data-testid="processing"]')).toBeVisible()
+    // Click convert to SVG button
+    console.log('Clicking Convert to SVG button...')
+    await page.locator('button:has-text("Convert to SVG")').click()
     
-    // Wait for processing to complete and SVG table to appear
-    await expect(page.locator('[data-testid="svg-table"]')).toBeVisible({ timeout: 60000 })
+    // Wait for SVG conversion to complete and pages table to appear
+    await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 60000 })
     
     // Should display multiple pages in a responsive grid
     const pageItems = page.locator('[data-testid="page-item"]')
     await expect(pageItems).toHaveCount(20) // 20 pages from our test PDF
     
-    // Each page should have SVG content
+    // Each page should have SVG content (SVGs are shown by default)
     const firstPageSvg = pageItems.first().locator('svg')
     await expect(firstPageSvg).toBeVisible()
     
     // Should have page number labels
     await expect(pageItems.first().locator('[data-testid="page-number"]')).toContainText('18')
     await expect(pageItems.last().locator('[data-testid="page-number"]')).toContainText('37')
+    
+    // Test toggles
+    await expect(page.getByRole('checkbox', { name: 'Show Bitmaps' })).not.toBeChecked() // Show Bitmaps off
+    await expect(page.getByRole('checkbox', { name: 'Show SVGs' })).toBeChecked() // Show SVGs on
   })
 })

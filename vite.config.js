@@ -9,10 +9,17 @@ export default defineConfig({
     }
   },
   define: {
-    global: 'globalThis'
+    global: 'globalThis',
+    __dirname: JSON.stringify('/'),
+    'process.env': {}
   },
   optimizeDeps: {
     include: ['@hyzyla/pdfium']
+  },
+  resolve: {
+    alias: {
+      path: 'path-browserify'
+    }
   },
   assetsInclude: ['**/*.wasm'],
   build: {
@@ -29,9 +36,10 @@ export default defineConfig({
     }
   },
   test: {
-    environment: 'jsdom',
+    environment: 'node',
     setupFiles: ['./tests/setup.js'],
     include: ['tests/**/*.test.js', 'tests/**/*.spec.js'],
+    exclude: ['tests/e2e/**/*'],
     coverage: {
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*'],

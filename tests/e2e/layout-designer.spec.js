@@ -52,8 +52,9 @@ test.describe('Layout Designer', () => {
       window.getComputedStyle(el).gridTemplateColumns
     )
     
-    // Should show 3 equal columns layout
-    expect(gridColumns).toContain('1fr') // Should have fractional units for responsive columns
+    // Should show 3 equal columns layout (computed styles show pixel values)
+    const columnCount = gridColumns.split(' ').length
+    expect(columnCount).toBe(3)
   })
 
   test('should support keyboard navigation for draggable pages', async ({ page }) => {
@@ -70,6 +71,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -92,9 +101,9 @@ test.describe('Layout Designer', () => {
     expect(newBox.x).toBeGreaterThan(initialBox.x)
   })
 
-  test('should support touch events for mobile devices', async ({ page, browserName }) => {
-    // Skip on desktop browsers that don't simulate touch well
-    test.skip(browserName === 'firefox', 'Firefox touch simulation issues')
+  test('should support touch events for mobile devices', async ({ page, browserName }, testInfo) => {
+    // Skip this test unless it's a mobile browser configuration
+    test.skip(testInfo.project.name !== 'mobile-chrome', 'Touch events only tested on mobile browser')
     
     page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
     
@@ -110,6 +119,14 @@ test.describe('Layout Designer', () => {
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
     
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
+    
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
     await expect(page.locator('[data-testid="layout-designer"]')).toBeVisible()
@@ -118,9 +135,32 @@ test.describe('Layout Designer', () => {
     const firstPage = page.locator('.draggable-page').first()
     const initialBox = await firstPage.boundingBox()
     
-    // Simulate touch drag
-    await page.touchscreen.tap(initialBox.x + 10, initialBox.y + 10)
-    await page.touchscreen.tap(initialBox.x + 100, initialBox.y + 80)
+    // Simulate touch events using DOM events instead of Playwright touchscreen API
+    await firstPage.dispatchEvent('touchstart', {
+      touches: [{ 
+        identifier: 0,
+        clientX: initialBox.x + 10, 
+        clientY: initialBox.y + 10,
+        pageX: initialBox.x + 10,
+        pageY: initialBox.y + 10
+      }]
+    })
+    
+    await page.waitForTimeout(100)
+    
+    await firstPage.dispatchEvent('touchmove', {
+      touches: [{ 
+        identifier: 0,
+        clientX: initialBox.x + 100, 
+        clientY: initialBox.y + 80,
+        pageX: initialBox.x + 100,
+        pageY: initialBox.y + 80
+      }]
+    })
+    
+    await firstPage.dispatchEvent('touchend', {
+      touches: []
+    })
     
     // Page should have moved (allow some tolerance for touch imprecision)
     const newBox = await firstPage.boundingBox()
@@ -141,6 +181,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -182,6 +230,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -233,6 +289,14 @@ test.describe('Layout Designer', () => {
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
     
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
+    
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
     
@@ -260,6 +324,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -293,6 +365,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -329,6 +409,14 @@ test.describe('Layout Designer', () => {
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
     
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
+    
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
     await expect(page.locator('[data-testid="layout-designer"]')).toBeVisible()
@@ -364,6 +452,14 @@ test.describe('Layout Designer', () => {
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
     
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
+    
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
     await expect(page.locator('[data-testid="layout-designer"]')).toBeVisible()
@@ -389,6 +485,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()
@@ -421,6 +525,14 @@ test.describe('Layout Designer', () => {
     
     await page.locator('button:has-text("Convert to SVG")').click()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for ALL pages to be converted (check that SVG processing is complete)
+    await expect(page.locator('.processing')).not.toBeVisible({ timeout: 60000 })
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
     
     // Open layout designer
     await page.locator('button:has-text("Open Layout Designer")').click()

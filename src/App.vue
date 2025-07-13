@@ -32,6 +32,21 @@
           Extract Pages
         </button>
         <div v-if="extractedPages.length > 0" class="svg-conversion-controls">
+          <div class="column-layout-controls">
+            <label>Layout Columns: 
+              <select 
+                v-model.number="columnCount"
+                class="column-layout-select"
+              >
+                <option value="1">1 Column</option>
+                <option value="2">2 Columns</option>
+                <option value="3">3 Columns</option>
+                <option value="4">4 Columns</option>
+                <option value="5">5 Columns</option>
+                <option value="6">6 Columns</option>
+              </select>
+            </label>
+          </div>
           <div class="threshold-control">
             <label>SVG Threshold: 
               <input 
@@ -131,7 +146,10 @@
     </div>
     
     <!-- Regular pages view -->
-    <div v-if="!reorganizing && (extractedPages.length > 0 || svgPages.length > 0)" data-testid="pages-table" class="pages-table">
+    <div v-if="!reorganizing && (extractedPages.length > 0 || svgPages.length > 0)" 
+         data-testid="pages-table" 
+         class="pages-table"
+         :style="{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }">
       <div 
         v-for="pageNumber in allPageNumbers" 
         :key="pageNumber"
@@ -236,7 +254,10 @@
               v-for="page in pagePositions" 
               :key="page.pageNumber"
               class="draggable-page"
-              :class="{ 'dragging': isDraggingPage && draggedPage?.pageNumber === page.pageNumber }"
+              :class="{ 
+                'dragging': isDraggingPage && draggedPage?.pageNumber === page.pageNumber,
+                'page-with-gradient': isInLastTenPercent(page.pageNumber)
+              }"
               :data-page="page.pageNumber"
               :style="{
                 position: 'absolute',
@@ -245,7 +266,14 @@
                 width: page.width + 'px',
                 height: page.height + 'px'
               }"
+              tabindex="0"
+              role="button"
+              :aria-label="`Page ${page.pageNumber} at position ${Math.round(page.x)}, ${Math.round(page.y)}. Use arrow keys to move.`"
               @mousedown="startPageDrag($event, page)"
+              @touchstart="startPageTouch($event, page)"
+              @touchmove="handlePageTouchMove"
+              @touchend="endPageTouch"
+              @keydown="handlePageKeydown($event, page)"
             >
               <div class="page-content">
                 <div class="page-header">
@@ -295,6 +323,8 @@ export default {
       splitPercentage: 50,
       isDragging: false,
       dragPageNumber: null,
+      // Layout properties
+      columnCount: 4,
       // Layout designer properties
       reorganizing: false,
       pagePositions: [],
@@ -309,7 +339,9 @@ export default {
       panY: 0,
       isPanning: false,
       panStart: { x: 0, y: 0 },
-      gridSize: 50
+      gridSize: 50,
+      // Touch interaction properties
+      touchStartPos: null
     }
   },
   computed: {
@@ -479,6 +511,115 @@ export default {
     
     getSVGPage(pageNumber) {
       return this.svgPages.find(page => page.pageNumber === pageNumber)
+    },
+    
+    isInLastTenPercent(pageNumber) {
+      if (this.svgPages.length === 0) return false
+      const sortedPages = this.svgPages.map(p => p.pageNumber).sort((a, b) => a - b)
+      const totalPages = sortedPages.length
+      const lastTenPercentThreshold = Math.ceil(totalPages * 0.9)
+      const pageIndex = sortedPages.indexOf(pageNumber)
+      return pageIndex >= lastTenPercentThreshold
+    },
+    
+    handlePageKeydown(event, page) {
+      const moveDistance = event.shiftKey ? 50 : 10 // Hold Shift for larger moves
+      
+      switch (event.key) {
+        case 'ArrowRight':
+          event.preventDefault()
+          page.x = Math.min(this.canvasWidth - page.width, page.x + moveDistance)
+          this.updatePageAriaLabel(page)
+          break
+        case 'ArrowLeft':
+          event.preventDefault()
+          page.x = Math.max(0, page.x - moveDistance)
+          this.updatePageAriaLabel(page)
+          break
+        case 'ArrowDown':
+          event.preventDefault()
+          page.y = Math.min(this.canvasHeight - page.height, page.y + moveDistance)
+          this.updatePageAriaLabel(page)
+          break
+        case 'ArrowUp':
+          event.preventDefault()
+          page.y = Math.max(0, page.y - moveDistance)
+          this.updatePageAriaLabel(page)
+          break
+        case 'Enter':
+        case ' ':
+          event.preventDefault()
+          // Focus on the page controls when Enter/Space is pressed
+          const pageElement = event.target
+          const firstButton = pageElement.querySelector('.size-btn')
+          if (firstButton) firstButton.focus()
+          break
+      }
+    },
+    
+    updatePageAriaLabel(page) {
+      // Update the aria-label to reflect new position for screen readers
+      this.$nextTick(() => {
+        const pageElement = document.querySelector(`[data-page="${page.pageNumber}"]`)
+        if (pageElement) {
+          pageElement.setAttribute('aria-label', 
+            `Page ${page.pageNumber} at position ${Math.round(page.x)}, ${Math.round(page.y)}. Use arrow keys to move.`
+          )
+        }
+      })
+    },
+    
+    startPageTouch(event, page) {
+      event.preventDefault()
+      this.isDraggingPage = true
+      this.draggedPage = page
+      
+      const touch = event.touches[0]
+      this.touchStartPos = {
+        x: touch.clientX,
+        y: touch.clientY,
+        pageX: page.x,
+        pageY: page.y
+      }
+      
+      // Add global touch event listeners
+      document.addEventListener('touchmove', this.handlePageTouchMove, { passive: false })
+      document.addEventListener('touchend', this.endPageTouch)
+    },
+    
+    handlePageTouchMove(event) {
+      if (!this.isDraggingPage || !this.draggedPage || !this.touchStartPos) return
+      
+      event.preventDefault()
+      const touch = event.touches[0]
+      
+      // Calculate movement delta scaled by zoom level
+      const deltaX = (touch.clientX - this.touchStartPos.x) / this.zoomLevel
+      const deltaY = (touch.clientY - this.touchStartPos.y) / this.zoomLevel
+      
+      // Update page position with bounds checking
+      this.draggedPage.x = Math.max(0, Math.min(
+        this.canvasWidth - this.draggedPage.width,
+        this.touchStartPos.pageX + deltaX
+      ))
+      this.draggedPage.y = Math.max(0, Math.min(
+        this.canvasHeight - this.draggedPage.height,
+        this.touchStartPos.pageY + deltaY
+      ))
+      
+      // Update aria-label for accessibility
+      this.updatePageAriaLabel(this.draggedPage)
+    },
+    
+    endPageTouch(event) {
+      event.preventDefault()
+      this.isDraggingPage = false
+      this.draggedPage = null
+      this.touchStartPos = null
+      
+      // Remove global touch event listeners
+      document.removeEventListener('touchmove', this.handlePageTouchMove)
+      document.removeEventListener('touchend', this.endPageTouch)
     },
     
     startDrag(event, pageNumber) {
@@ -766,6 +907,28 @@ export default {
   background: #f0f8ff;
   border-radius: 8px;
   border: 1px solid #bee5eb;
+}
+
+.column-layout-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.column-layout-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.column-layout-select {
+  padding: 5px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
 }
 
 .threshold-control {
@@ -1132,6 +1295,27 @@ export default {
   transform: scale(1.05);
   box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   z-index: 20;
+}
+
+.draggable-page.page-with-gradient {
+  position: relative;
+}
+
+.draggable-page.page-with-gradient::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 90%,
+    rgba(255, 255, 255, 0.8) 100%
+  );
+  pointer-events: none;
+  border-radius: 8px;
 }
 
 .page-content {

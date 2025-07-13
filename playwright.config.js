@@ -30,6 +30,13 @@ export default defineConfig({
         headless: true,
       },
     },
+    {
+      name: 'mobile-chrome',
+      use: { 
+        ...devices['Galaxy S5'],
+        headless: true,
+      },
+    },
   ],
   webServer: {
     command: 'npm run dev',

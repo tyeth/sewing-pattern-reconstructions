@@ -152,6 +152,325 @@ test.describe('Bitmap Rendering Bugs', () => {
     await page.waitForTimeout(5000) // Wait for conversion
   })
   
+  test('should show bitmaps when checkbox is checked and maintain data on toggle', async ({ page }) => {
+    page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
+    
+    await page.goto('/')
+    
+    // Upload PDF and extract pages
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles('tests/patterns/menspajamashortsfinal_aiid2146907_page18to37.pdf')
+    
+    await page.locator('button:has-text("Extract Pages")').click()
+    await expect(page.locator('button:has-text("Convert to SVG")')).toBeVisible({ timeout: 30000 })
+    
+    // Initially bitmaps should be unchecked and not visible
+    await expect(page.getByRole('checkbox', { name: 'Show Bitmaps' })).not.toBeChecked()
+    await expect(page.locator('.bitmap-canvas').first()).not.toBeVisible()
+    
+    // Check show bitmaps - they should appear
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    await expect(page.locator('.bitmap-canvas').first()).toBeVisible()
+    
+    // Verify bitmap data is present by checking canvas dimensions
+    const firstCanvas = page.locator('.bitmap-canvas').first()
+    const canvasWidth = await firstCanvas.evaluate(canvas => canvas.width)
+    const canvasHeight = await firstCanvas.evaluate(canvas => canvas.height)
+    
+    console.log(`Canvas dimensions: ${canvasWidth}x${canvasHeight}`)
+    expect(canvasWidth).toBeGreaterThan(0)
+    expect(canvasHeight).toBeGreaterThan(0)
+    
+    // Get actual image data from canvas to verify meaningful content
+    const imageData = await firstCanvas.evaluate(canvas => {
+      const ctx = canvas.getContext('2d')
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Sample pixels from different areas of the image
+      const samples = []
+      const width = canvas.width
+      const height = canvas.height
+      
+      // Sample 25 pixels from different regions
+      for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+          const pixelX = Math.floor((x + 0.5) * width / 5)
+          const pixelY = Math.floor((y + 0.5) * height / 5) 
+          const index = (pixelY * width + pixelX) * 4
+          
+          samples.push([
+            data.data[index],     // R
+            data.data[index + 1], // G  
+            data.data[index + 2], // B
+            data.data[index + 3]  // A
+          ])
+        }
+      }
+      
+      // Check for variance in the image (not all same color)
+      const uniqueColors = new Set(samples.map(pixel => pixel.join(',')))
+      const hasVariance = uniqueColors.size > 1
+      
+      // Calculate hash of all samples for comparison
+      let hash = 0
+      samples.forEach((pixel, i) => {
+        hash += pixel[0] * (i + 1) + pixel[1] * (i + 2) + pixel[2] * (i + 3) + pixel[3] * (i + 4)
+      })
+      
+      return { 
+        width: canvas.width, 
+        height: canvas.height,
+        samples,
+        uniqueColors: uniqueColors.size,
+        hasVariance,
+        hash
+      }
+    })
+    
+    console.log(`Image data check: ${imageData.uniqueColors} unique colors, hash: ${imageData.hash}`)
+    expect(imageData.uniqueColors).toBeGreaterThan(1) // Should have actual image content, not solid color
+    expect(imageData.hasVariance).toBe(true)
+    
+    // Uncheck bitmaps - they should disappear
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).uncheck()
+    await expect(page.locator('.bitmap-canvas').first()).not.toBeVisible()
+    
+    // Check bitmaps again - they should reappear with same data
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    await expect(page.locator('.bitmap-canvas').first()).toBeVisible()
+    
+    // Verify the EXACT same image data is still there after toggle
+    const imageDataAfterToggle = await firstCanvas.evaluate(canvas => {
+      const ctx = canvas.getContext('2d')
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Sample the exact same pixels from different areas
+      const samples = []
+      const width = canvas.width
+      const height = canvas.height
+      
+      // Sample 25 pixels from different regions (same as before)
+      for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+          const pixelX = Math.floor((x + 0.5) * width / 5)
+          const pixelY = Math.floor((y + 0.5) * height / 5) 
+          const index = (pixelY * width + pixelX) * 4
+          
+          samples.push([
+            data.data[index],     // R
+            data.data[index + 1], // G  
+            data.data[index + 2], // B
+            data.data[index + 3]  // A
+          ])
+        }
+      }
+      
+      const uniqueColors = new Set(samples.map(pixel => pixel.join(',')))
+      
+      // Calculate hash of all samples
+      let hash = 0
+      samples.forEach((pixel, i) => {
+        hash += pixel[0] * (i + 1) + pixel[1] * (i + 2) + pixel[2] * (i + 3) + pixel[3] * (i + 4)
+      })
+      
+      return { 
+        width: canvas.width, 
+        height: canvas.height,
+        samples,
+        uniqueColors: uniqueColors.size,
+        hash
+      }
+    })
+    
+    console.log(`Image data after toggle: ${imageDataAfterToggle.uniqueColors} unique colors, hash: ${imageDataAfterToggle.hash}`)
+    expect(imageDataAfterToggle.uniqueColors).toBe(imageData.uniqueColors)
+    expect(imageDataAfterToggle.width).toBe(imageData.width)
+    expect(imageDataAfterToggle.height).toBe(imageData.height)
+    
+    // CRITICAL: verify the actual image data is identical pixel-by-pixel
+    expect(imageDataAfterToggle.hash).toBe(imageData.hash)
+    expect(imageDataAfterToggle.samples).toEqual(imageData.samples)
+  })
+
+  test('should maintain bitmap data integrity after SVG conversion', async ({ page }) => {
+    page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
+    
+    await page.goto('/')
+    
+    // Upload PDF and extract pages
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles('tests/patterns/menspajamashortsfinal_aiid2146907_page18to37.pdf')
+    
+    await page.locator('button:has-text("Extract Pages")').click()
+    await expect(page.locator('button:has-text("Convert to SVG")')).toBeVisible({ timeout: 30000 })
+    
+    // Initially bitmaps should be unchecked and not visible
+    await expect(page.getByRole('checkbox', { name: 'Show Bitmaps' })).not.toBeChecked()
+    await expect(page.locator('.bitmap-canvas').first()).not.toBeVisible()
+    
+    // Check show bitmaps - they should appear
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    await expect(page.locator('.bitmap-canvas').first()).toBeVisible()
+    
+    // Get initial bitmap data
+    const firstCanvas = page.locator('.bitmap-canvas').first()
+    const initialImageData = await firstCanvas.evaluate(canvas => {
+      const ctx = canvas.getContext('2d')
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Sample pixels from different areas of the image
+      const samples = []
+      const width = canvas.width
+      const height = canvas.height
+      
+      // Sample 25 pixels from different regions
+      for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+          const pixelX = Math.floor((x + 0.5) * width / 5)
+          const pixelY = Math.floor((y + 0.5) * height / 5) 
+          const index = (pixelY * width + pixelX) * 4
+          
+          samples.push([
+            data.data[index],     // R
+            data.data[index + 1], // G  
+            data.data[index + 2], // B
+            data.data[index + 3]  // A
+          ])
+        }
+      }
+      
+      // Calculate hash of all samples
+      let hash = 0
+      samples.forEach((pixel, i) => {
+        hash += pixel[0] * (i + 1) + pixel[1] * (i + 2) + pixel[2] * (i + 3) + pixel[3] * (i + 4)
+      })
+      
+      const uniqueColors = new Set(samples.map(pixel => pixel.join(',')))
+      
+      return { 
+        width: canvas.width, 
+        height: canvas.height,
+        samples,
+        uniqueColors: uniqueColors.size,
+        hash
+      }
+    })
+    
+    console.log(`Initial bitmap data: ${initialImageData.uniqueColors} unique colors, hash: ${initialImageData.hash}`)
+    expect(initialImageData.uniqueColors).toBeGreaterThan(1)
+    
+    // Toggle bitmaps off and on to verify they persist
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).uncheck()
+    await expect(page.locator('.bitmap-canvas').first()).not.toBeVisible()
+    
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    await expect(page.locator('.bitmap-canvas').first()).toBeVisible()
+    
+    // NOW CONVERT TO SVG - this is where the issue might occur
+    await page.locator('button:has-text("Convert to SVG")').click()
+    await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Wait for SVG conversion to complete
+    await page.waitForFunction(() => {
+      const buttons = document.querySelectorAll('button')
+      const svgButton = Array.from(buttons).find(btn => btn.textContent.includes('Convert to SVG'))
+      return !svgButton || !svgButton.disabled
+    }, { timeout: 60000 })
+    
+    // Verify bitmap data is still intact after SVG conversion
+    const postSVGImageData = await firstCanvas.evaluate(canvas => {
+      const ctx = canvas.getContext('2d')
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      // Sample the exact same pixels
+      const samples = []
+      const width = canvas.width
+      const height = canvas.height
+      
+      for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+          const pixelX = Math.floor((x + 0.5) * width / 5)
+          const pixelY = Math.floor((y + 0.5) * height / 5) 
+          const index = (pixelY * width + pixelX) * 4
+          
+          samples.push([
+            data.data[index],
+            data.data[index + 1],
+            data.data[index + 2],
+            data.data[index + 3]
+          ])
+        }
+      }
+      
+      let hash = 0
+      samples.forEach((pixel, i) => {
+        hash += pixel[0] * (i + 1) + pixel[1] * (i + 2) + pixel[2] * (i + 3) + pixel[3] * (i + 4)
+      })
+      
+      const uniqueColors = new Set(samples.map(pixel => pixel.join(',')))
+      
+      return { 
+        width: canvas.width, 
+        height: canvas.height,
+        samples,
+        uniqueColors: uniqueColors.size,
+        hash
+      }
+    })
+    
+    console.log(`Post-SVG bitmap data: ${postSVGImageData.uniqueColors} unique colors, hash: ${postSVGImageData.hash}`)
+    
+    // CRITICAL: bitmap data should be identical before and after SVG conversion
+    expect(postSVGImageData.hash).toBe(initialImageData.hash)
+    expect(postSVGImageData.samples).toEqual(initialImageData.samples)
+    expect(postSVGImageData.uniqueColors).toBe(initialImageData.uniqueColors)
+    
+    // Test final toggle after SVG conversion
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).uncheck()
+    await expect(page.locator('.bitmap-canvas').first()).not.toBeVisible()
+    
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    await expect(page.locator('.bitmap-canvas').first()).toBeVisible()
+    
+    // Verify bitmap data is still intact after final toggle
+    const finalImageData = await firstCanvas.evaluate(canvas => {
+      const ctx = canvas.getContext('2d')
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      
+      const samples = []
+      const width = canvas.width
+      const height = canvas.height
+      
+      for (let y = 0; y < 5; y++) {
+        for (let x = 0; x < 5; x++) {
+          const pixelX = Math.floor((x + 0.5) * width / 5)
+          const pixelY = Math.floor((y + 0.5) * height / 5) 
+          const index = (pixelY * width + pixelX) * 4
+          
+          samples.push([
+            data.data[index],
+            data.data[index + 1],
+            data.data[index + 2],
+            data.data[index + 3]
+          ])
+        }
+      }
+      
+      let hash = 0
+      samples.forEach((pixel, i) => {
+        hash += pixel[0] * (i + 1) + pixel[1] * (i + 2) + pixel[2] * (i + 3) + pixel[3] * (i + 4)
+      })
+      
+      return { hash, samples }
+    })
+    
+    console.log(`Final bitmap data hash: ${finalImageData.hash}`)
+    
+    // Final verification: all bitmap data should still be identical
+    expect(finalImageData.hash).toBe(initialImageData.hash)
+    expect(finalImageData.samples).toEqual(initialImageData.samples)
+  })
+
   test('should provide split-view comparison with wiper control', async ({ page }) => {
     page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
     

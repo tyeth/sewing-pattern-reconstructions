@@ -1,0 +1,73 @@
+# Page snapshot
+
+```yaml
+- heading "Sewing Pattern Reconstruction" [level=1]
+- button "Choose File"
+- text: "Start Page:"
+- spinbutton "Start Page:": "18"
+- text: "End Page:"
+- spinbutton "End Page:": "37"
+- button "Extract Pages"
+- text: "Layout Columns:"
+- combobox "Layout Columns:":
+  - option "1 Column"
+  - option "2 Columns"
+  - option "3 Columns"
+  - option "4 Columns" [selected]
+  - option "5 Columns"
+  - option "6 Columns"
+- text: "SVG Threshold:"
+- 'slider "SVG Threshold: 128"': "130"
+- text: "128"
+- button "Convert to SVG"
+- checkbox "Show Bitmaps" [checked]
+- text: Show Bitmaps
+- checkbox "Show SVGs" [checked]
+- text: "Show SVGs Split View:"
+- 'slider "Split View: 50%"': "50"
+- text: 50%
+- heading "Page Layout Designer" [level=3]
+- paragraph: Drag and arrange your pattern pages on a large canvas. Group them however you want for your final layout.
+- button "Open Layout Designer"
+- text: Page 18
+- img
+- text: Bitmap SVG (1 paths) Page 19
+- img
+- text: Bitmap SVG (1 paths) Page 20
+- img
+- text: Bitmap SVG (1 paths) Page 21
+- img
+- text: Bitmap SVG (1 paths) Page 22
+- img
+- text: Bitmap SVG (1 paths) Page 23
+- img
+- text: Bitmap SVG (1 paths) Page 24
+- img
+- text: Bitmap SVG (1 paths) Page 25
+- img
+- text: Bitmap SVG (1 paths) Page 26
+- img
+- text: Bitmap SVG (1 paths) Page 27
+- img
+- text: Bitmap SVG (1 paths) Page 28
+- img
+- text: Bitmap SVG (1 paths) Page 29
+- img
+- text: Bitmap SVG (1 paths) Page 30
+- img
+- text: Bitmap SVG (1 paths) Page 31
+- img
+- text: Bitmap SVG (1 paths) Page 32
+- img
+- text: Bitmap SVG (1 paths) Page 33
+- img
+- text: Bitmap SVG (1 paths) Page 34
+- img
+- text: Bitmap SVG (1 paths) Page 35
+- img
+- text: Bitmap SVG (1 paths) Page 36
+- img
+- text: Bitmap SVG (1 paths) Page 37
+- img
+- text: Bitmap SVG (1 paths)
+```

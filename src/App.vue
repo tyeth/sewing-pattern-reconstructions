@@ -256,7 +256,7 @@
               class="draggable-page"
               :class="{ 
                 'dragging': isDraggingPage && draggedPage?.pageNumber === page.pageNumber,
-                'page-with-gradient': isInLastTenPercent(page.pageNumber)
+                'page-with-gradient': true
               }"
               :data-page="page.pageNumber"
               :style="{
@@ -276,14 +276,13 @@
               @keydown="handlePageKeydown($event, page)"
             >
               <div class="page-content">
-                <div class="page-header">
+                <div class="page-header" @click.stop="togglePageHeader(page.pageNumber)">
                   <span class="page-number">Page {{ page.pageNumber }}</span>
                   <div class="page-controls">
-                    <button @click.stop="resizePage(page, 0.8)" class="size-btn">−</button>
-                    <button @click.stop="resizePage(page, 1.25)" class="size-btn">+</button>
+                    <button class="collapse-btn">{{ isHeaderCollapsed(page.pageNumber) ? '▼' : '▲' }}</button>
                   </div>
                 </div>
-                <div class="svg-preview" v-html="getSVGPage(page.pageNumber).svg"></div>
+                <div v-if="!isHeaderCollapsed(page.pageNumber)" class="svg-preview" v-html="getSVGPage(page.pageNumber).svg"></div>
               </div>
             </div>
             
@@ -341,7 +340,9 @@ export default {
       panStart: { x: 0, y: 0 },
       gridSize: 50,
       // Touch interaction properties
-      touchStartPos: null
+      touchStartPos: null,
+      // Header collapse state
+      collapsedHeaders: new Set()
     }
   },
   computed: {
@@ -513,14 +514,6 @@ export default {
       return this.svgPages.find(page => page.pageNumber === pageNumber)
     },
     
-    isInLastTenPercent(pageNumber) {
-      if (this.svgPages.length === 0) return false
-      const sortedPages = this.svgPages.map(p => p.pageNumber).sort((a, b) => a - b)
-      const totalPages = sortedPages.length
-      const lastTenPercentThreshold = Math.ceil(totalPages * 0.9)
-      const pageIndex = sortedPages.indexOf(pageNumber)
-      return pageIndex >= lastTenPercentThreshold
-    },
     
     handlePageKeydown(event, page) {
       const moveDistance = event.shiftKey ? 50 : 10 // Hold Shift for larger moves
@@ -620,6 +613,20 @@ export default {
       // Remove global touch event listeners
       document.removeEventListener('touchmove', this.handlePageTouchMove)
       document.removeEventListener('touchend', this.endPageTouch)
+    },
+    
+    togglePageHeader(pageNumber) {
+      if (this.collapsedHeaders.has(pageNumber)) {
+        this.collapsedHeaders.delete(pageNumber)
+      } else {
+        this.collapsedHeaders.add(pageNumber)
+      }
+      // Force reactivity update
+      this.$forceUpdate()
+    },
+    
+    isHeaderCollapsed(pageNumber) {
+      return this.collapsedHeaders.has(pageNumber)
     },
     
     startDrag(event, pageNumber) {
@@ -1286,15 +1293,19 @@ export default {
 }
 
 .draggable-page:hover {
-  transform: scale(1.02);
   box-shadow: 0 6px 12px rgba(0,0,0,0.2);
   z-index: 10;
 }
 
 .draggable-page.dragging {
-  transform: scale(1.05);
   box-shadow: 0 8px 16px rgba(0,0,0,0.3);
   z-index: 20;
+}
+
+.draggable-page.dragging .page-header {
+  background: #ffd700;
+  border-bottom: 3px solid #ffc107;
+  font-weight: bold;
 }
 
 .draggable-page.page-with-gradient {
@@ -1309,10 +1320,18 @@ export default {
   right: 0;
   bottom: 0;
   background: linear-gradient(
-    to bottom,
-    transparent 0%,
+    to right,
+    rgba(255, 255, 255, 0.6) 0%,
+    transparent 10%,
     transparent 90%,
-    rgba(255, 255, 255, 0.8) 100%
+    rgba(255, 255, 255, 0.6) 100%
+  ),
+  linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.6) 0%,
+    transparent 10%,
+    transparent 90%,
+    rgba(255, 255, 255, 0.6) 100%
   );
   pointer-events: none;
   border-radius: 8px;
@@ -1346,20 +1365,25 @@ export default {
 }
 
 .size-btn {
+  display: none; /* Hide scaling buttons */
+}
+
+.collapse-btn {
   width: 24px;
   height: 24px;
   border: 1px solid #ccc;
   background: white;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 0.2s;
 }
 
-.size-btn:hover {
+.collapse-btn:hover {
   background: #f8f9fa;
 }
 

@@ -74,14 +74,49 @@
             <label>Split View: 
               <input 
                 type="range" 
-                min="10" 
-                max="90" 
-                step="5" 
+                min="1" 
+                max="99" 
+                step="1" 
                 v-model.number="splitPercentage"
                 class="split-slider"
               />
               <span class="split-value">{{ splitPercentage }}%</span>
             </label>
+          </div>
+        </div>
+        
+        <div v-if="svgPages.length > 0" class="reorganize-controls">
+          <div class="reorganize-header">
+            <h3>Page Reorganization</h3>
+            <p>Arrange your pattern pages into columns for easier layout</p>
+          </div>
+          
+          <div class="reorganize-options">
+            <label>Columns: 
+              <select v-model.number="columnCount" class="column-selector">
+                <option value="2">2 Columns</option>
+                <option value="3">3 Columns</option>
+                <option value="4">4 Columns</option>
+                <option value="5">5 Columns</option>
+                <option value="6">6 Columns</option>
+              </select>
+            </label>
+            
+            <button 
+              @click="startReorganization" 
+              :disabled="reorganizing"
+              class="reorganize-button"
+            >
+              {{ reorganizing ? 'Organizing...' : 'Start Page Organization' }}
+            </button>
+            
+            <button 
+              v-if="reorganizing" 
+              @click="finishReorganization"
+              class="finish-button"
+            >
+              Finish & Export Layout
+            </button>
           </div>
         </div>
       </div>
@@ -101,7 +136,8 @@
       </div>
     </div>
     
-    <div v-if="extractedPages.length > 0 || svgPages.length > 0" data-testid="pages-table" class="pages-table">
+    <!-- Regular pages view -->
+    <div v-if="!reorganizing && (extractedPages.length > 0 || svgPages.length > 0)" data-testid="pages-table" class="pages-table">
       <div 
         v-for="pageNumber in allPageNumbers" 
         :key="pageNumber"
@@ -163,6 +199,46 @@
         </div>
       </div>
     </div>
+    
+    <!-- Page reorganization canvas -->
+    <div v-if="reorganizing" class="reorganization-workspace" data-testid="reorganization-workspace">
+      <div class="workspace-header">
+        <h3>Organize Pages into {{ columnCount }} Columns</h3>
+        <p>Drag pages to rearrange them. Pages will automatically arrange into columns.</p>
+      </div>
+      
+      <div class="workspace-canvas" :ref="workspaceCanvas">
+        <div 
+          class="column-guide" 
+          v-for="col in columnCount" 
+          :key="col"
+          :style="{ 
+            left: ((col - 1) / columnCount * 100) + '%',
+            width: (100 / columnCount) + '%'
+          }"
+        >
+          <div class="column-header">Column {{ col }}</div>
+          <div class="column-drop-zone" :data-column="col">
+            <div 
+              v-for="page in getPagesByColumn(col)" 
+              :key="page.pageNumber"
+              class="draggable-page"
+              :data-page="page.pageNumber"
+              :style="{
+                top: page.y + 'px',
+                left: page.x + 'px'
+              }"
+              @mousedown="startPageDrag($event, page)"
+            >
+              <div class="page-thumbnail">
+                <div class="page-label">Page {{ page.pageNumber }}</div>
+                <div class="svg-thumbnail" v-html="getSVGPage(page.pageNumber).svg"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -194,7 +270,14 @@ export default {
       thresholdLevel: 128,
       splitPercentage: 50,
       isDragging: false,
-      dragPageNumber: null
+      dragPageNumber: null,
+      // Reorganization properties
+      reorganizing: false,
+      columnCount: 4,
+      pagePositions: [],
+      isDraggingPage: false,
+      draggedPage: null,
+      dragOffset: { x: 0, y: 0 }
     }
   },
   computed: {
@@ -384,7 +467,7 @@ export default {
       
       const rect = splitContent.getBoundingClientRect()
       const x = event.clientX - rect.left
-      const percentage = Math.max(10, Math.min(90, (x / rect.width) * 100))
+      const percentage = Math.max(1, Math.min(99, (x / rect.width) * 100))
       
       this.splitPercentage = Math.round(percentage)
     },
@@ -396,12 +479,84 @@ export default {
       // Remove global event listeners
       document.removeEventListener('mousemove', this.onDrag)
       document.removeEventListener('mouseup', this.endDrag)
+    },
+    
+    // Reorganization methods
+    startReorganization() {
+      this.reorganizing = true
+      this.initializePagePositions()
+    },
+    
+    finishReorganization() {
+      this.reorganizing = false
+      // Here we could export the final layout or return to normal view
+      console.log('Final page positions:', this.pagePositions)
+    },
+    
+    initializePagePositions() {
+      this.pagePositions = this.svgPages.map((page, index) => ({
+        pageNumber: page.pageNumber,
+        column: (index % this.columnCount) + 1,
+        x: 0,
+        y: Math.floor(index / this.columnCount) * 250, // 250px spacing between pages
+        width: 200,
+        height: 200
+      }))
+    },
+    
+    getPagesByColumn(column) {
+      return this.pagePositions.filter(page => page.column === column)
+    },
+    
+    startPageDrag(event, page) {
+      this.isDraggingPage = true
+      this.draggedPage = page
+      
+      const rect = event.target.getBoundingClientRect()
+      this.dragOffset = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      }
+      
+      event.preventDefault()
+      document.addEventListener('mousemove', this.onPageDrag)
+      document.addEventListener('mouseup', this.endPageDrag)
+    },
+    
+    onPageDrag(event) {
+      if (!this.isDraggingPage || !this.draggedPage) return
+      
+      const workspace = this.$refs.workspaceCanvas
+      if (!workspace) return
+      
+      const rect = workspace.getBoundingClientRect()
+      const x = event.clientX - rect.left - this.dragOffset.x
+      const y = event.clientY - rect.top - this.dragOffset.y
+      
+      // Update page position
+      this.draggedPage.x = Math.max(0, x)
+      this.draggedPage.y = Math.max(0, y)
+      
+      // Determine which column this page should be in
+      const columnWidth = rect.width / this.columnCount
+      const newColumn = Math.min(this.columnCount, Math.max(1, Math.ceil((x + this.draggedPage.width / 2) / columnWidth)))
+      this.draggedPage.column = newColumn
+    },
+    
+    endPageDrag() {
+      this.isDraggingPage = false
+      this.draggedPage = null
+      
+      document.removeEventListener('mousemove', this.onPageDrag)
+      document.removeEventListener('mouseup', this.endPageDrag)
     }
   },
   beforeUnmount() {
     // Clean up event listeners
     document.removeEventListener('mousemove', this.onDrag)
     document.removeEventListener('mouseup', this.endDrag)
+    document.removeEventListener('mousemove', this.onPageDrag)
+    document.removeEventListener('mouseup', this.endPageDrag)
   },
   watch: {
     showBitmaps(newVal) {
@@ -735,5 +890,180 @@ export default {
 
 .svg-label {
   font-weight: bold;
+}
+
+/* Reorganization Controls */
+.reorganize-controls {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f0f8ff;
+  border-radius: 8px;
+  border: 2px solid #007bff;
+}
+
+.reorganize-header h3 {
+  margin: 0 0 10px 0;
+  color: #007bff;
+}
+
+.reorganize-header p {
+  margin: 0 0 15px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.reorganize-options {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.reorganize-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.column-selector {
+  padding: 5px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+}
+
+.reorganize-button {
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.reorganize-button:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.reorganize-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.finish-button {
+  padding: 8px 16px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.finish-button:hover {
+  background: #1e7e34;
+}
+
+/* Reorganization Workspace */
+.reorganization-workspace {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #28a745;
+}
+
+.workspace-header h3 {
+  margin: 0 0 10px 0;
+  color: #28a745;
+}
+
+.workspace-header p {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.workspace-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 800px;
+  background: white;
+  border: 2px dashed #dee2e6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.column-guide {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-right: 1px solid #dee2e6;
+  background: rgba(0, 123, 255, 0.05);
+}
+
+.column-guide:last-child {
+  border-right: none;
+}
+
+.column-header {
+  padding: 10px;
+  background: rgba(0, 123, 255, 0.1);
+  border-bottom: 1px solid #dee2e6;
+  font-weight: bold;
+  color: #007bff;
+  text-align: center;
+}
+
+.column-drop-zone {
+  position: relative;
+  height: calc(100% - 45px);
+  padding: 10px;
+}
+
+.draggable-page {
+  position: absolute;
+  width: 200px;
+  background: white;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  cursor: move;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: box-shadow 0.2s;
+}
+
+.draggable-page:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.page-thumbnail {
+  padding: 10px;
+}
+
+.page-label {
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #007bff;
+  text-align: center;
+}
+
+.svg-thumbnail {
+  width: 100%;
+  height: 150px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+}
+
+.svg-thumbnail svg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 </style>

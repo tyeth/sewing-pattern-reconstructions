@@ -12,4 +12,11 @@ test.describe('Initial Page', () => {
     
     await expect(page).toHaveTitle('Sewing Pattern Reconstruction')
   })
+
+  test('should have a file upload input for PDF patterns', async ({ page }) => {
+    await page.goto('/')
+    
+    await expect(page.locator('input[type="file"]')).toBeVisible()
+    await expect(page.locator('input[type="file"]')).toHaveAttribute('accept', '.pdf')
+  })
 })

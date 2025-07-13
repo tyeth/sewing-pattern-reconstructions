@@ -87,36 +87,30 @@
         
         <div v-if="svgPages.length > 0" class="reorganize-controls">
           <div class="reorganize-header">
-            <h3>Page Reorganization</h3>
-            <p>Arrange your pattern pages into columns for easier layout</p>
+            <h3>Page Layout Designer</h3>
+            <p>Drag and arrange your pattern pages on a large canvas. Group them however you want for your final layout.</p>
           </div>
           
           <div class="reorganize-options">
-            <label>Columns: 
-              <select v-model.number="columnCount" class="column-selector">
-                <option value="2">2 Columns</option>
-                <option value="3">3 Columns</option>
-                <option value="4">4 Columns</option>
-                <option value="5">5 Columns</option>
-                <option value="6">6 Columns</option>
-              </select>
-            </label>
-            
             <button 
               @click="startReorganization" 
               :disabled="reorganizing"
               class="reorganize-button"
             >
-              {{ reorganizing ? 'Organizing...' : 'Start Page Organization' }}
+              {{ reorganizing ? 'Arranging Pages...' : 'Open Layout Designer' }}
             </button>
             
-            <button 
-              v-if="reorganizing" 
-              @click="finishReorganization"
-              class="finish-button"
-            >
-              Finish & Export Layout
-            </button>
+            <div v-if="reorganizing" class="layout-tools">
+              <button @click="resetPagePositions" class="tool-button">
+                Reset Positions
+              </button>
+              <button @click="autoArrangeGrid" class="tool-button">
+                Auto-Arrange Grid
+              </button>
+              <button @click="finishReorganization" class="finish-button">
+                Finish & Export Layout
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -200,42 +194,71 @@
       </div>
     </div>
     
-    <!-- Page reorganization canvas -->
-    <div v-if="reorganizing" class="reorganization-workspace" data-testid="reorganization-workspace">
-      <div class="workspace-header">
-        <h3>Organize Pages into {{ columnCount }} Columns</h3>
-        <p>Drag pages to rearrange them. Pages will automatically arrange into columns.</p>
+    <!-- Page layout designer canvas -->
+    <div v-if="reorganizing" class="layout-designer" data-testid="layout-designer">
+      <div class="designer-header">
+        <h3>Layout Designer - {{ svgPages.length }} Pages</h3>
+        <p>Drag pages anywhere on the canvas. Use mouse wheel to zoom, click and drag empty space to pan.</p>
+        <div class="canvas-info">
+          Canvas Size: {{ canvasWidth }}px × {{ canvasHeight }}px | Zoom: {{ Math.round(zoomLevel * 100) }}%
+        </div>
       </div>
       
-      <div class="workspace-canvas" :ref="workspaceCanvas">
-        <div 
-          class="column-guide" 
-          v-for="col in columnCount" 
-          :key="col"
-          :style="{ 
-            left: ((col - 1) / columnCount * 100) + '%',
-            width: (100 / columnCount) + '%',
-            height: Math.max(800, Math.ceil(svgPages.length / columnCount) * 250 + 100) + 'px'
-          }"
-        >
-          <div class="column-header">Column {{ col }}</div>
-          <div class="column-drop-zone" :data-column="col">
+      <div class="canvas-container" 
+           @wheel="handleCanvasWheel" 
+           @mousedown="handleCanvasMouseDown"
+           @mousemove="handleCanvasMouseMove"
+           @mouseup="handleCanvasMouseUp">
+        
+        <div class="canvas-viewport" 
+             :style="{
+               transform: `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`,
+               transformOrigin: '0 0'
+             }">
+          
+          <div class="canvas-background" 
+               :style="{
+                 width: canvasWidth + 'px',
+                 height: canvasHeight + 'px'
+               }">
+            
+            <!-- Grid overlay -->
+            <div class="grid-overlay" 
+                 :style="{
+                   backgroundSize: `${gridSize}px ${gridSize}px`,
+                   width: canvasWidth + 'px',
+                   height: canvasHeight + 'px'
+                 }">
+            </div>
+            
+            <!-- Draggable pages -->
             <div 
-              v-for="page in getPagesByColumn(col)" 
+              v-for="page in pagePositions" 
               :key="page.pageNumber"
               class="draggable-page"
+              :class="{ 'dragging': isDraggingPage && draggedPage?.pageNumber === page.pageNumber }"
               :data-page="page.pageNumber"
               :style="{
+                position: 'absolute',
+                left: page.x + 'px',
                 top: page.y + 'px',
-                left: page.x + 'px'
+                width: page.width + 'px',
+                height: page.height + 'px'
               }"
               @mousedown="startPageDrag($event, page)"
             >
-              <div class="page-thumbnail">
-                <div class="page-label">Page {{ page.pageNumber }}</div>
-                <div class="svg-thumbnail" v-html="getSVGPage(page.pageNumber).svg"></div>
+              <div class="page-content">
+                <div class="page-header">
+                  <span class="page-number">Page {{ page.pageNumber }}</span>
+                  <div class="page-controls">
+                    <button @click.stop="resizePage(page, 0.8)" class="size-btn">−</button>
+                    <button @click.stop="resizePage(page, 1.25)" class="size-btn">+</button>
+                  </div>
+                </div>
+                <div class="svg-preview" v-html="getSVGPage(page.pageNumber).svg"></div>
               </div>
             </div>
+            
           </div>
         </div>
       </div>
@@ -272,13 +295,21 @@ export default {
       splitPercentage: 50,
       isDragging: false,
       dragPageNumber: null,
-      // Reorganization properties
+      // Layout designer properties
       reorganizing: false,
-      columnCount: 4,
       pagePositions: [],
       isDraggingPage: false,
       draggedPage: null,
-      dragOffset: { x: 0, y: 0 }
+      dragOffset: { x: 0, y: 0 },
+      // Canvas properties
+      canvasWidth: 2400,
+      canvasHeight: 1600,
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      panStart: { x: 0, y: 0 },
+      gridSize: 50
     }
   },
   computed: {
@@ -482,7 +513,7 @@ export default {
       document.removeEventListener('mouseup', this.endDrag)
     },
     
-    // Reorganization methods
+    // Layout designer methods
     startReorganization() {
       this.reorganizing = true
       this.initializePagePositions()
@@ -490,35 +521,68 @@ export default {
     
     finishReorganization() {
       this.reorganizing = false
-      // Here we could export the final layout or return to normal view
-      console.log('Final page positions:', this.pagePositions)
+      console.log('Final layout positions:', this.pagePositions)
     },
     
     initializePagePositions() {
+      // Start with a loose grid arrangement
+      const cols = Math.ceil(Math.sqrt(this.svgPages.length))
       this.pagePositions = this.svgPages.map((page, index) => ({
         pageNumber: page.pageNumber,
-        column: (index % this.columnCount) + 1,
-        x: 10, // Small offset from column edge
-        y: Math.floor(index / this.columnCount) * 250 + 60, // 250px spacing + header offset
-        width: 200,
-        height: 200
+        x: (index % cols) * 280 + 50, // 280px spacing horizontally
+        y: Math.floor(index / cols) * 320 + 50, // 320px spacing vertically
+        width: 250,
+        height: 300
       }))
-      
-      // Update workspace height to accommodate all pages
-      this.$nextTick(() => {
-        const workspace = this.$refs.workspaceCanvas
-        if (workspace) {
-          const maxRows = Math.ceil(this.svgPages.length / this.columnCount)
-          const requiredHeight = Math.max(800, maxRows * 250 + 100) // Extra padding
-          workspace.style.minHeight = requiredHeight + 'px'
-        }
+    },
+    
+    resetPagePositions() {
+      this.initializePagePositions()
+    },
+    
+    autoArrangeGrid() {
+      const cols = Math.ceil(Math.sqrt(this.pagePositions.length))
+      this.pagePositions.forEach((page, index) => {
+        page.x = (index % cols) * 280 + 50
+        page.y = Math.floor(index / cols) * 320 + 50
       })
     },
     
-    getPagesByColumn(column) {
-      return this.pagePositions.filter(page => page.column === column)
+    resizePage(page, factor) {
+      page.width = Math.max(100, Math.min(500, page.width * factor))
+      page.height = Math.max(120, Math.min(600, page.height * factor))
     },
     
+    // Canvas interaction methods
+    handleCanvasWheel(event) {
+      event.preventDefault()
+      const delta = event.deltaY > 0 ? 0.9 : 1.1
+      this.zoomLevel = Math.max(0.1, Math.min(3, this.zoomLevel * delta))
+    },
+    
+    handleCanvasMouseDown(event) {
+      if (event.target.closest('.draggable-page')) return
+      
+      this.isPanning = true
+      this.panStart = {
+        x: event.clientX - this.panX,
+        y: event.clientY - this.panY
+      }
+      event.preventDefault()
+    },
+    
+    handleCanvasMouseMove(event) {
+      if (this.isPanning) {
+        this.panX = event.clientX - this.panStart.x
+        this.panY = event.clientY - this.panStart.y
+      }
+    },
+    
+    handleCanvasMouseUp() {
+      this.isPanning = false
+    },
+    
+    // Page drag methods
     startPageDrag(event, page) {
       this.isDraggingPage = true
       this.draggedPage = page
@@ -530,6 +594,7 @@ export default {
       }
       
       event.preventDefault()
+      event.stopPropagation()
       document.addEventListener('mousemove', this.onPageDrag)
       document.addEventListener('mouseup', this.endPageDrag)
     },
@@ -537,21 +602,18 @@ export default {
     onPageDrag(event) {
       if (!this.isDraggingPage || !this.draggedPage) return
       
-      const workspace = this.$refs.workspaceCanvas
-      if (!workspace) return
+      const container = document.querySelector('.canvas-viewport')
+      if (!container) return
       
-      const rect = workspace.getBoundingClientRect()
-      const x = event.clientX - rect.left - this.dragOffset.x
-      const y = event.clientY - rect.top - this.dragOffset.y
+      const rect = container.getBoundingClientRect()
       
-      // Update page position
-      this.draggedPage.x = Math.max(0, x)
-      this.draggedPage.y = Math.max(0, y)
+      // Account for zoom and pan
+      const x = (event.clientX - rect.left) / this.zoomLevel - this.panX / this.zoomLevel - this.dragOffset.x
+      const y = (event.clientY - rect.top) / this.zoomLevel - this.panY / this.zoomLevel - this.dragOffset.y
       
-      // Determine which column this page should be in
-      const columnWidth = rect.width / this.columnCount
-      const newColumn = Math.min(this.columnCount, Math.max(1, Math.ceil((x + this.draggedPage.width / 2) / columnWidth)))
-      this.draggedPage.column = newColumn
+      // Update page position within canvas bounds
+      this.draggedPage.x = Math.max(0, Math.min(this.canvasWidth - this.draggedPage.width, x))
+      this.draggedPage.y = Math.max(0, Math.min(this.canvasHeight - this.draggedPage.height, y))
     },
     
     endPageDrag() {
@@ -903,7 +965,7 @@ export default {
   font-weight: bold;
 }
 
-/* Reorganization Controls */
+/* Layout Designer Controls */
 .reorganize-controls {
   margin-top: 20px;
   padding: 20px;
@@ -930,28 +992,25 @@ export default {
   flex-wrap: wrap;
 }
 
-.reorganize-options label {
+.layout-tools {
   display: flex;
+  gap: 10px;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
+  flex-wrap: wrap;
 }
 
-.column-selector {
-  padding: 5px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: white;
-}
-
-.reorganize-button {
+.reorganize-button, .tool-button, .finish-button {
   padding: 8px 16px;
-  background: #007bff;
-  color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
+  font-size: 14px;
+}
+
+.reorganize-button {
+  background: #007bff;
+  color: white;
 }
 
 .reorganize-button:hover:not(:disabled) {
@@ -963,116 +1022,173 @@ export default {
   cursor: not-allowed;
 }
 
+.tool-button {
+  background: #6c757d;
+  color: white;
+}
+
+.tool-button:hover {
+  background: #545b62;
+}
+
 .finish-button {
-  padding: 8px 16px;
   background: #28a745;
   color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
 }
 
 .finish-button:hover {
   background: #1e7e34;
 }
 
-/* Reorganization Workspace */
-.reorganization-workspace {
-  margin-top: 20px;
-  padding: 20px;
+/* Layout Designer Canvas */
+.layout-designer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   background: #f8f9fa;
-  border-radius: 8px;
-  border: 2px solid #28a745;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
 }
 
-.workspace-header h3 {
+.designer-header {
+  padding: 20px;
+  background: white;
+  border-bottom: 2px solid #28a745;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.designer-header h3 {
   margin: 0 0 10px 0;
   color: #28a745;
 }
 
-.workspace-header p {
-  margin: 0 0 20px 0;
+.designer-header p {
+  margin: 0 0 10px 0;
   color: #666;
   font-size: 14px;
 }
 
-.workspace-canvas {
-  position: relative;
-  width: 100%;
-  min-height: 800px;
-  max-height: 800px;
-  background: white;
-  border: 2px dashed #dee2e6;
-  border-radius: 4px;
-  overflow: auto;
+.canvas-info {
+  font-size: 12px;
+  color: #888;
+  font-family: monospace;
 }
 
-.column-guide {
+.canvas-container {
+  flex: 1;
+  overflow: hidden;
+  background: #e9ecef;
+  position: relative;
+  cursor: grab;
+}
+
+.canvas-container:active {
+  cursor: grabbing;
+}
+
+.canvas-viewport {
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+
+.canvas-background {
+  background: white;
+  position: relative;
+  box-shadow: 0 0 20px rgba(0,0,0,0.1);
+}
+
+.grid-overlay {
   position: absolute;
   top: 0;
-  border-right: 1px solid #dee2e6;
-  background: rgba(0, 123, 255, 0.05);
-}
-
-.column-guide:last-child {
-  border-right: none;
-}
-
-.column-header {
-  padding: 10px;
-  background: rgba(0, 123, 255, 0.1);
-  border-bottom: 1px solid #dee2e6;
-  font-weight: bold;
-  color: #007bff;
-  text-align: center;
-}
-
-.column-drop-zone {
-  position: relative;
-  padding: 10px;
-  min-height: 400px;
+  left: 0;
+  pointer-events: none;
+  background-image: 
+    linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+  opacity: 0.3;
 }
 
 .draggable-page {
-  position: absolute;
-  width: 200px;
   background: white;
   border: 2px solid #007bff;
   border-radius: 8px;
   cursor: move;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: box-shadow 0.2s;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transition: transform 0.1s, box-shadow 0.2s;
+  user-select: none;
 }
 
 .draggable-page:hover {
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  transform: scale(1.02);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+  z-index: 10;
 }
 
-.page-thumbnail {
-  padding: 10px;
+.draggable-page.dragging {
+  transform: scale(1.05);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+  z-index: 20;
 }
 
-.page-label {
+.page-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 6px 6px 0 0;
+}
+
+.page-number {
   font-weight: bold;
-  margin-bottom: 5px;
   color: #007bff;
-  text-align: center;
+  font-size: 14px;
 }
 
-.svg-thumbnail {
-  width: 100%;
-  height: 150px;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-  overflow: hidden;
+.page-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.size-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.size-btn:hover {
   background: #f8f9fa;
 }
 
-.svg-thumbnail svg {
+.svg-preview {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.svg-preview svg {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;

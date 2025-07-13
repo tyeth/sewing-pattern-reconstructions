@@ -214,7 +214,8 @@
           :key="col"
           :style="{ 
             left: ((col - 1) / columnCount * 100) + '%',
-            width: (100 / columnCount) + '%'
+            width: (100 / columnCount) + '%',
+            height: Math.max(800, Math.ceil(svgPages.length / columnCount) * 250 + 100) + 'px'
           }"
         >
           <div class="column-header">Column {{ col }}</div>
@@ -497,11 +498,21 @@ export default {
       this.pagePositions = this.svgPages.map((page, index) => ({
         pageNumber: page.pageNumber,
         column: (index % this.columnCount) + 1,
-        x: 0,
-        y: Math.floor(index / this.columnCount) * 250, // 250px spacing between pages
+        x: 10, // Small offset from column edge
+        y: Math.floor(index / this.columnCount) * 250 + 60, // 250px spacing + header offset
         width: 200,
         height: 200
       }))
+      
+      // Update workspace height to accommodate all pages
+      this.$nextTick(() => {
+        const workspace = this.$refs.workspaceCanvas
+        if (workspace) {
+          const maxRows = Math.ceil(this.svgPages.length / this.columnCount)
+          const requiredHeight = Math.max(800, maxRows * 250 + 100) // Extra padding
+          workspace.style.minHeight = requiredHeight + 'px'
+        }
+      })
     },
     
     getPagesByColumn(column) {
@@ -990,16 +1001,16 @@ export default {
   position: relative;
   width: 100%;
   min-height: 800px;
+  max-height: 800px;
   background: white;
   border: 2px dashed #dee2e6;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .column-guide {
   position: absolute;
   top: 0;
-  height: 100%;
   border-right: 1px solid #dee2e6;
   background: rgba(0, 123, 255, 0.05);
 }
@@ -1019,8 +1030,8 @@ export default {
 
 .column-drop-zone {
   position: relative;
-  height: calc(100% - 45px);
   padding: 10px;
+  min-height: 400px;
 }
 
 .draggable-page {

@@ -1,4 +1,7 @@
 import { PDFiumLibrary } from '@hyzyla/pdfium'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
 
 let pdfiumLibrary = null
 
@@ -13,11 +16,7 @@ export async function extractPagesFromPDF(pdfBuffer, startPage, endPage) {
       const wasmResponse = await fetch('/pdfium.wasm')
       wasmBinary = await wasmResponse.arrayBuffer()
     } else {
-      // Node.js or test environment - dynamically import Node.js modules
-      const { readFileSync } = await import('fs')
-      const { fileURLToPath } = await import('url')
-      const { dirname, join } = await import('path')
-      
+      // Node.js or test environment - read the WASM file directly
       const __filename = fileURLToPath(import.meta.url)
       const __dirname = dirname(__filename)
       const wasmPath = join(__dirname, '../../node_modules/@hyzyla/pdfium/dist/vendor/pdfium.wasm')

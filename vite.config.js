@@ -2,7 +2,21 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: 'buffer-polyfill',
+      transformIndexHtml: {
+        enforce: 'pre',
+        transform(html) {
+          return html.replace(
+            '<head>',
+            '<head>\n  <script>window.global = window;</script>\n  <script type="module">import { Buffer } from "buffer"; window.Buffer = Buffer;</script>'
+          )
+        }
+      }
+    }
+  ],
   server: {
     fs: {
       allow: ['..']
@@ -14,11 +28,16 @@ export default defineConfig({
     'process.env': {}
   },
   optimizeDeps: {
-    include: ['@hyzyla/pdfium']
+    include: ['@hyzyla/pdfium', 'buffer', 'util', 'events', 'stream-browserify']
   },
   resolve: {
     alias: {
-      path: 'path-browserify'
+      path: 'path-browserify',
+      url: 'url-polyfill',
+      fs: 'browserify-fs',
+      util: 'util',
+      events: 'events',
+      stream: 'stream-browserify'
     }
   },
   assetsInclude: ['**/*.wasm'],

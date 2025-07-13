@@ -69,6 +69,20 @@
             />
             Show SVGs
           </label>
+          
+          <div v-if="showBitmaps && showSVGs" class="split-control">
+            <label>Split View: 
+              <input 
+                type="range" 
+                min="10" 
+                max="90" 
+                step="5" 
+                v-model.number="splitPercentage"
+                class="split-slider"
+              />
+              <span class="split-value">{{ splitPercentage }}%</span>
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -98,8 +112,38 @@
           Page {{ pageNumber }}
         </div>
         
-        <!-- Bitmap version -->
-        <div v-if="showBitmaps && getBitmapPage(pageNumber)" class="bitmap-container">
+        <!-- Split view when both are enabled -->
+        <div v-if="showBitmaps && showSVGs && getBitmapPage(pageNumber) && getSVGPage(pageNumber)" class="split-view-container">
+          <div class="split-content">
+            <!-- Bitmap on left -->
+            <div class="bitmap-section" :style="{ width: splitPercentage + '%' }">
+              <canvas 
+                :ref="`canvas-${pageNumber}`"
+                :data-page="pageNumber"
+                class="bitmap-canvas split-canvas"
+              ></canvas>
+            </div>
+            
+            <!-- SVG on right -->
+            <div class="svg-section" :style="{ width: (100 - splitPercentage) + '%' }">
+              <div class="svg-content" v-html="getSVGPage(pageNumber).svg"></div>
+            </div>
+            
+            <!-- Wiper bar -->
+            <div class="wiper-bar" :style="{ left: splitPercentage + '%' }">
+              <div class="wiper-handle"></div>
+            </div>
+          </div>
+          
+          <!-- Labels -->
+          <div class="split-labels">
+            <span class="bitmap-label">Bitmap</span>
+            <span class="svg-label">SVG ({{ getSVGPage(pageNumber).pathCount }} paths)</span>
+          </div>
+        </div>
+        
+        <!-- Bitmap only (or when SVGs don't exist yet) -->
+        <div v-else-if="showBitmaps && getBitmapPage(pageNumber) && (!showSVGs || !getSVGPage(pageNumber))" class="bitmap-container">
           <h4>Bitmap</h4>
           <canvas 
             :ref="`canvas-${pageNumber}`"
@@ -108,8 +152,8 @@
           ></canvas>
         </div>
         
-        <!-- SVG version -->
-        <div v-if="showSVGs && getSVGPage(pageNumber)" class="svg-container">
+        <!-- SVG only -->
+        <div v-else-if="showSVGs && getSVGPage(pageNumber) && !showBitmaps" class="svg-container">
           <h4>SVG ({{ getSVGPage(pageNumber).pathCount }} paths)</h4>
           <div v-html="getSVGPage(pageNumber).svg"></div>
         </div>
@@ -143,7 +187,8 @@ export default {
       currentPageDebug: '',
       showBitmaps: false,
       showSVGs: true,
-      thresholdLevel: 128
+      thresholdLevel: 128,
+      splitPercentage: 50
     }
   },
   computed: {
@@ -396,6 +441,32 @@ export default {
   margin: 0;
 }
 
+.split-control {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.split-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.split-slider {
+  width: 100px;
+  margin: 0 5px;
+}
+
+.split-value {
+  min-width: 35px;
+  font-weight: bold;
+  color: #555;
+}
+
 .svg-conversion-controls {
   display: flex;
   gap: 15px;
@@ -500,5 +571,92 @@ export default {
   width: 100%;
   height: auto;
   max-height: 400px;
+}
+
+/* Split View Styles */
+.split-view-container {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.split-content {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 400px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bitmap-section {
+  position: relative;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+.svg-section {
+  position: relative;
+  overflow: hidden;
+  background: white;
+}
+
+.split-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.svg-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.svg-content svg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.wiper-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #007bff;
+  cursor: col-resize;
+  z-index: 10;
+  transform: translateX(-2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wiper-handle {
+  width: 12px;
+  height: 40px;
+  background: #007bff;
+  border-radius: 6px;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.split-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #666;
+}
+
+.bitmap-label {
+  font-weight: bold;
+}
+
+.svg-label {
+  font-weight: bold;
 }
 </style>

@@ -24,8 +24,8 @@ test.describe('Bitmap Rendering Bugs', () => {
     await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
     await expect(page.locator('[data-testid="pages-table"]')).toBeVisible()
     
-    // Bitmaps should be empty on first extraction (bug)
-    const firstCanvas = page.locator('.bitmap-canvas').first()
+    // Bitmaps should be displayed (either in split view or standalone)
+    const firstCanvas = page.locator('.bitmap-canvas, .split-canvas').first()
     await expect(firstCanvas).toBeVisible()
     
     // Turn off bitmap display and try SVG conversion
@@ -54,7 +54,7 @@ test.describe('Bitmap Rendering Bugs', () => {
     await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
     
     // Bitmaps should now have content
-    const secondCanvas = page.locator('.bitmap-canvas').first()
+    const secondCanvas = page.locator('.bitmap-canvas, .split-canvas').first()
     await expect(secondCanvas).toBeVisible()
     
     // STEP 4: Convert to SVG again - should work correctly now
@@ -64,27 +64,27 @@ test.describe('Bitmap Rendering Bugs', () => {
     // Wait for conversion to complete
     await page.waitForTimeout(10000)
     
-    // Both bitmaps and SVGs should be visible and have content
-    await expect(page.locator('.svg-container svg').first()).toBeVisible()
+    // Both bitmaps and SVGs should be visible and have content (in split view)
+    await expect(page.locator('.svg-container svg, .svg-content svg').first()).toBeVisible()
     
     // STEP 5: Test toggle issues
     console.log('STEP 5: Testing toggle issues...')
     
     // Untick bitmaps - they should hide
     await page.getByRole('checkbox', { name: 'Show Bitmaps' }).uncheck()
-    await expect(page.locator('.bitmap-container').first()).not.toBeVisible()
+    await expect(page.locator('.bitmap-container, .split-view-container').first()).not.toBeVisible()
     
     // Retick bitmaps - they should appear but might be blank again (bug)
     await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
-    await expect(page.locator('.bitmap-container').first()).toBeVisible()
+    await expect(page.locator('.bitmap-container, .split-view-container').first()).toBeVisible()
     
     // Untick and retick SVGs - should show correctly
     await page.getByRole('checkbox', { name: 'Show SVGs' }).uncheck()
-    await expect(page.locator('.svg-container').first()).not.toBeVisible()
+    await expect(page.locator('.svg-container, .split-view-container').first()).not.toBeVisible()
     
     await page.getByRole('checkbox', { name: 'Show SVGs' }).check()
-    await expect(page.locator('.svg-container').first()).toBeVisible()
-    await expect(page.locator('.svg-container svg').first()).toBeVisible()
+    await expect(page.locator('.svg-container, .split-view-container').first()).toBeVisible()
+    await expect(page.locator('.svg-container svg, .svg-content svg').first()).toBeVisible()
   })
   
   test('should handle files without page info in filename', async ({ page }) => {
@@ -150,5 +150,73 @@ test.describe('Bitmap Rendering Bugs', () => {
     // Convert again with higher threshold
     await page.locator('button:has-text("Convert to SVG")').click()
     await page.waitForTimeout(5000) // Wait for conversion
+  })
+  
+  test('should provide split-view comparison with wiper control', async ({ page }) => {
+    page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
+    
+    await page.goto('/')
+    
+    // Upload PDF and extract pages
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles('tests/patterns/menspajamashortsfinal_aiid2146907_page18to37.pdf')
+    
+    await page.locator('button:has-text("Extract Pages")').click()
+    await expect(page.locator('button:has-text("Convert to SVG")')).toBeVisible({ timeout: 30000 })
+    
+    // Convert to SVG
+    await page.locator('button:has-text("Convert to SVG")').click()
+    await expect(page.locator('[data-testid="pages-table"]')).toBeVisible({ timeout: 30000 })
+    
+    // Initially only SVGs are shown
+    await expect(page.getByRole('checkbox', { name: 'Show Bitmaps' })).not.toBeChecked()
+    await expect(page.getByRole('checkbox', { name: 'Show SVGs' })).toBeChecked()
+    
+    // Split control should not be visible when only one format is shown
+    await expect(page.locator('.split-control')).not.toBeVisible()
+    
+    // Enable bitmaps to activate split view
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).check()
+    
+    // Split control should now be visible
+    await expect(page.locator('.split-control')).toBeVisible()
+    await expect(page.locator('.split-slider')).toBeVisible()
+    
+    // Default split should be 50%
+    const splitSlider = page.locator('.split-slider')
+    await expect(splitSlider).toHaveValue('50')
+    await expect(page.locator('.split-value')).toContainText('50%')
+    
+    // Should show split-view containers
+    await expect(page.locator('.split-view-container').first()).toBeVisible()
+    await expect(page.locator('.bitmap-section').first()).toBeVisible()
+    await expect(page.locator('.svg-section').first()).toBeVisible()
+    await expect(page.locator('.wiper-bar').first()).toBeVisible()
+    
+    // Test split adjustment
+    console.log('Testing split adjustment...')
+    
+    // Adjust to 25% (more SVG visible)
+    await splitSlider.fill('25')
+    await expect(page.locator('.split-value')).toContainText('25%')
+    
+    // Adjust to 75% (more bitmap visible)
+    await splitSlider.fill('75')
+    await expect(page.locator('.split-value')).toContainText('75%')
+    
+    // Verify labels are present
+    await expect(page.locator('.bitmap-label').first()).toContainText('Bitmap')
+    await expect(page.locator('.svg-label').first()).toContainText('SVG')
+    
+    // Test disabling one format returns to single view
+    await page.getByRole('checkbox', { name: 'Show SVGs' }).uncheck()
+    await expect(page.locator('.split-control')).not.toBeVisible()
+    await expect(page.locator('.bitmap-container').first()).toBeVisible()
+    
+    // Re-enable SVGs and test the other direction
+    await page.getByRole('checkbox', { name: 'Show SVGs' }).check()
+    await page.getByRole('checkbox', { name: 'Show Bitmaps' }).uncheck()
+    await expect(page.locator('.split-control')).not.toBeVisible()
+    await expect(page.locator('.svg-container').first()).toBeVisible()
   })
 })

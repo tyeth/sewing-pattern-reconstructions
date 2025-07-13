@@ -114,9 +114,9 @@
         
         <!-- Split view when both are enabled -->
         <div v-if="showBitmaps && showSVGs && getBitmapPage(pageNumber) && getSVGPage(pageNumber)" class="split-view-container">
-          <div class="split-content">
-            <!-- Bitmap on left -->
-            <div class="bitmap-section" :style="{ width: splitPercentage + '%' }">
+          <div class="split-content" :ref="`split-content-${pageNumber}`">
+            <!-- Bitmap layer (full width, clipped on right) -->
+            <div class="bitmap-section" :style="{ clipPath: `inset(0 ${100 - splitPercentage}% 0 0)` }">
               <canvas 
                 :ref="`canvas-${pageNumber}`"
                 :data-page="pageNumber"
@@ -124,13 +124,17 @@
               ></canvas>
             </div>
             
-            <!-- SVG on right -->
-            <div class="svg-section" :style="{ width: (100 - splitPercentage) + '%' }">
+            <!-- SVG layer (full width, clipped on left) -->
+            <div class="svg-section" :style="{ clipPath: `inset(0 0 0 ${splitPercentage}%)` }">
               <div class="svg-content" v-html="getSVGPage(pageNumber).svg"></div>
             </div>
             
             <!-- Wiper bar -->
-            <div class="wiper-bar" :style="{ left: splitPercentage + '%' }">
+            <div 
+              class="wiper-bar" 
+              :style="{ left: splitPercentage + '%' }"
+              @mousedown="startDrag($event, pageNumber)"
+            >
               <div class="wiper-handle"></div>
             </div>
           </div>
@@ -188,7 +192,9 @@ export default {
       showBitmaps: false,
       showSVGs: true,
       thresholdLevel: 128,
-      splitPercentage: 50
+      splitPercentage: 50,
+      isDragging: false,
+      dragPageNumber: null
     }
   },
   computed: {
@@ -332,13 +338,22 @@ export default {
     
     renderBitmapsToCanvas() {
       this.extractedPages.forEach(page => {
-        const canvas = this.$refs[`canvas-${page.pageNumber}`]?.[0]
-        if (canvas && page.imageData) {
-          canvas.width = page.imageData.width
-          canvas.height = page.imageData.height
-          const ctx = canvas.getContext('2d')
-          const imageData = new ImageData(page.imageData.data, page.imageData.width, page.imageData.height)
-          ctx.putImageData(imageData, 0, 0)
+        // Get all canvas elements for this page (could be in different layouts)
+        const canvasRefs = this.$refs[`canvas-${page.pageNumber}`]
+        
+        if (canvasRefs && page.imageData) {
+          // Handle both single canvas and array of canvases
+          const canvases = Array.isArray(canvasRefs) ? canvasRefs : [canvasRefs]
+          
+          canvases.forEach(canvas => {
+            if (canvas) {
+              canvas.width = page.imageData.width
+              canvas.height = page.imageData.height
+              const ctx = canvas.getContext('2d')
+              const imageData = new ImageData(page.imageData.data, page.imageData.width, page.imageData.height)
+              ctx.putImageData(imageData, 0, 0)
+            }
+          })
         }
       })
     },
@@ -349,12 +364,58 @@ export default {
     
     getSVGPage(pageNumber) {
       return this.svgPages.find(page => page.pageNumber === pageNumber)
+    },
+    
+    startDrag(event, pageNumber) {
+      this.isDragging = true
+      this.dragPageNumber = pageNumber
+      event.preventDefault()
+      
+      // Add global event listeners
+      document.addEventListener('mousemove', this.onDrag)
+      document.addEventListener('mouseup', this.endDrag)
+    },
+    
+    onDrag(event) {
+      if (!this.isDragging || !this.dragPageNumber) return
+      
+      const splitContent = this.$refs[`split-content-${this.dragPageNumber}`]?.[0]
+      if (!splitContent) return
+      
+      const rect = splitContent.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const percentage = Math.max(10, Math.min(90, (x / rect.width) * 100))
+      
+      this.splitPercentage = Math.round(percentage)
+    },
+    
+    endDrag() {
+      this.isDragging = false
+      this.dragPageNumber = null
+      
+      // Remove global event listeners
+      document.removeEventListener('mousemove', this.onDrag)
+      document.removeEventListener('mouseup', this.endDrag)
     }
+  },
+  beforeUnmount() {
+    // Clean up event listeners
+    document.removeEventListener('mousemove', this.onDrag)
+    document.removeEventListener('mouseup', this.endDrag)
   },
   watch: {
     showBitmaps(newVal) {
       if (newVal && this.extractedPages.length > 0) {
         // Re-render canvases when bitmap visibility is toggled on
+        this.$nextTick(() => {
+          setTimeout(() => this.renderBitmapsToCanvas(), 50)
+          setTimeout(() => this.renderBitmapsToCanvas(), 200)
+        })
+      }
+    },
+    showSVGs() {
+      // Re-render bitmaps when SVG visibility changes (affects layout)
+      if (this.showBitmaps && this.extractedPages.length > 0) {
         this.$nextTick(() => {
           setTimeout(() => this.renderBitmapsToCanvas(), 50)
           setTimeout(() => this.renderBitmapsToCanvas(), 200)
@@ -590,14 +651,20 @@ export default {
 }
 
 .bitmap-section {
-  position: relative;
-  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: #f8f9fa;
 }
 
 .svg-section {
-  position: relative;
-  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: white;
 }
 
@@ -633,6 +700,11 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  user-select: none;
+}
+
+.wiper-bar:hover {
+  background: #0056b3;
 }
 
 .wiper-handle {
@@ -642,6 +714,11 @@ export default {
   border-radius: 6px;
   border: 2px solid white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+
+.wiper-bar:hover .wiper-handle {
+  background: #0056b3;
 }
 
 .split-labels {

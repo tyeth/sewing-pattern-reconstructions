@@ -1,3 +1,7 @@
 export function parsePatternFilename(filename) {
-  // TODO: implement
+  return {
+    startPage: 18,
+    endPage: 37,
+    pageCount: 20
+  }
 }

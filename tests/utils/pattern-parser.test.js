@@ -11,5 +11,14 @@ describe('Pattern Parser Utils', () => {
       expect(result.endPage).toBe(37)
       expect(result.pageCount).toBe(20)
     })
+
+    it('should extract different page numbers from different filename', () => {
+      const filename = 'womens-dress-pattern_page5to12.pdf'
+      const result = parsePatternFilename(filename)
+      
+      expect(result.startPage).toBe(5)
+      expect(result.endPage).toBe(12)
+      expect(result.pageCount).toBe(8)
+    })
   })
 })

@@ -77,6 +77,18 @@ projects: {
 
 ## Development Guidelines
 
+### Test-Driven Development (TDD)
+- ALWAYS follow proper TDD cycle: Red → Green → Refactor
+- Write failing tests first, then minimal implementation to pass
+- NEVER implement full functionality just to pass tests
+- Start with simplest possible implementation (return null, empty object, etc.)
+- Only add functionality incrementally as tests demand it
+- Tests should fail for the right reasons (missing functionality, not syntax errors)
+- NO faking the TDD process - tests must genuinely fail before implementation
+- NEVER use mocks without explicit permission
+- NEVER mock test data or test objects - use real data only
+- Use actual files and real examples for testing
+
 ### Testing Requirements
 - Unit tests for image processing algorithms
 - Integration tests for workflow stages

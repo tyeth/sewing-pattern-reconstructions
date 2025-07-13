@@ -16,4 +16,17 @@ describe('PDF Processing with PDFium', () => {
     expect(extractedPages[0]).toHaveProperty('imageData')
     expect(extractedPages[0].imageData).toBeDefined()
   })
+
+  it('should extract actual image data with width and height from PDF page', async () => {
+    const pdfPath = join(process.cwd(), 'tests/patterns/menspajamashortsfinal_aiid2146907_page18to37.pdf')
+    const pdfBuffer = readFileSync(pdfPath)
+    
+    const extractedPages = await extractPagesFromPDF(pdfBuffer, 18, 18) // Just first page
+    const firstPage = extractedPages[0]
+    
+    expect(firstPage.imageData.width).toBeGreaterThan(100) // Real PDF page should be wider than 100px
+    expect(firstPage.imageData.height).toBeGreaterThan(100) // Real PDF page should be taller than 100px
+    expect(firstPage.imageData.data).toBeInstanceOf(Uint8ClampedArray)
+    expect(firstPage.imageData.data.length).toBeGreaterThan(1000) // Real image should have substantial data
+  })
 })

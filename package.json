@@ -18,7 +18,9 @@
   "dependencies": {
     "vue": "^3.3.0",
     "vue-router": "^4.2.0",
-    "pinia": "^2.1.0"
+    "pinia": "^2.1.0",
+    "@hyzyla/pdfium": "^1.0.0",
+    "potrace": "^2.1.8"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.3.0",

@@ -475,6 +475,16 @@ export default {
         
         console.log(`SVG conversion complete! Generated ${this.svgPages.length} SVG pages`)
         
+        // CRITICAL: Re-render bitmaps after SVG conversion because DOM structure changed
+        // When SVGs are generated, the template switches from bitmap-only to split-view
+        // which recreates canvas elements and clears their data
+        this.$nextTick(() => {
+          this.renderBitmapsToCanvas()
+          // Extra safety renders to ensure data is restored
+          setTimeout(() => this.renderBitmapsToCanvas(), 100)
+          setTimeout(() => this.renderBitmapsToCanvas(), 300)
+        })
+        
       } catch (error) {
         console.error('Error converting to SVG:', error)
         alert('Error converting to SVG: ' + error.message)
@@ -547,6 +557,20 @@ export default {
           const firstButton = pageElement.querySelector('.size-btn')
           if (firstButton) firstButton.focus()
           break
+        case 'Escape':
+          event.preventDefault()
+          this.finishReorganization()
+          break
+      }
+    },
+    
+    handleLayoutKeydown(event) {
+      // Global keyboard handler for layout designer
+      if (!this.reorganizing) return
+      
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        this.finishReorganization()
       }
     },
     
@@ -665,10 +689,14 @@ export default {
     startReorganization() {
       this.reorganizing = true
       this.initializePagePositions()
+      // Add global keyboard listener for layout designer
+      document.addEventListener('keydown', this.handleLayoutKeydown)
     },
     
     finishReorganization() {
       this.reorganizing = false
+      // Remove global keyboard listener
+      document.removeEventListener('keydown', this.handleLayoutKeydown)
       console.log('Final layout positions:', this.pagePositions)
     },
     
@@ -778,6 +806,7 @@ export default {
     document.removeEventListener('mouseup', this.endDrag)
     document.removeEventListener('mousemove', this.onPageDrag)
     document.removeEventListener('mouseup', this.endPageDrag)
+    document.removeEventListener('keydown', this.handleLayoutKeydown)
   },
   watch: {
     showBitmaps(newVal) {
@@ -797,6 +826,15 @@ export default {
           setTimeout(() => this.renderBitmapsToCanvas(), 200)
         })
       }
+    },
+    svgPages: {
+      handler() {
+        // Update layout designer when new SVG pages are added
+        if (this.reorganizing && this.svgPages.length > this.pagePositions.length) {
+          this.initializePagePositions()
+        }
+      },
+      deep: true
     }
   }
 }
@@ -1321,17 +1359,17 @@ export default {
   bottom: 0;
   background: linear-gradient(
     to right,
-    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.2) 0%,
     transparent 10%,
     transparent 90%,
-    rgba(255, 255, 255, 0.6) 100%
+    rgba(255, 255, 255, 0.2) 100%
   ),
   linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.2) 0%,
     transparent 10%,
     transparent 90%,
-    rgba(255, 255, 255, 0.6) 100%
+    rgba(255, 255, 255, 0.2) 100%
   );
   pointer-events: none;
   border-radius: 8px;

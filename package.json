@@ -17,15 +17,10 @@
   },
   "dependencies": {
     "@hyzyla/pdfium": "^1.0.0",
-    "browserify-fs": "^1.0.0",
-    "buffer": "^6.0.3",
-    "events": "^3.3.0",
     "path-browserify": "^1.0.1",
     "pinia": "^2.1.0",
     "potrace": "^2.1.8",
-    "stream-browserify": "^3.0.0",
-    "url-polyfill": "^1.1.13",
-    "util": "^0.12.5",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "vue": "^3.3.0",
     "vue-router": "^4.2.0"
   },

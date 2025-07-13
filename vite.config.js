@@ -1,44 +1,22 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 export default defineConfig({
   plugins: [
     vue(),
-    {
-      name: 'buffer-polyfill',
-      transformIndexHtml: {
-        enforce: 'pre',
-        transform(html) {
-          return html.replace(
-            '<head>',
-            '<head>\n  <script>window.global = window;</script>\n  <script type="module">import { Buffer } from "buffer"; window.Buffer = Buffer;</script>'
-          )
-        }
-      }
-    }
+    nodePolyfills({
+      // Whether to polyfill `node:` protocol imports.
+      protocolImports: true,
+    })
   ],
   server: {
     fs: {
       allow: ['..']
     }
   },
-  define: {
-    global: 'globalThis',
-    __dirname: JSON.stringify('/'),
-    'process.env': {}
-  },
   optimizeDeps: {
-    include: ['@hyzyla/pdfium', 'buffer', 'util', 'events', 'stream-browserify']
-  },
-  resolve: {
-    alias: {
-      path: 'path-browserify',
-      url: 'url-polyfill',
-      fs: 'browserify-fs',
-      util: 'util',
-      events: 'events',
-      stream: 'stream-browserify'
-    }
+    include: ['@hyzyla/pdfium']
   },
   assetsInclude: ['**/*.wasm'],
   build: {

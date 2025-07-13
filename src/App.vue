@@ -215,10 +215,37 @@
     <!-- Page layout designer canvas -->
     <div v-if="reorganizing" class="layout-designer" data-testid="layout-designer">
       <div class="designer-header">
-        <h3>Layout Designer - {{ svgPages.length }} Pages</h3>
-        <p>Drag pages anywhere on the canvas. Use mouse wheel to zoom, click and drag empty space to pan.</p>
-        <div class="canvas-info">
-          Canvas Size: {{ canvasWidth }}px × {{ canvasHeight }}px | Zoom: {{ Math.round(zoomLevel * 100) }}%
+        <div class="header-top">
+          <div class="header-left">
+            <h3>Layout Designer - {{ svgPages.length }} Pages</h3>
+            <p>Drag pages anywhere on the canvas. Use mouse wheel to zoom, click and drag empty space to pan. Press Escape to close.</p>
+          </div>
+          <div class="header-right">
+            <button @click="finishReorganization" class="close-button" title="Close Layout Designer (Escape)">
+              ✕ Close
+            </button>
+          </div>
+        </div>
+        <div class="designer-controls">
+          <div class="column-layout-controls">
+            <label>Reorganize to Columns: 
+              <select 
+                v-model.number="layoutColumnCount"
+                @change="reorganizeToColumns"
+                class="column-layout-select"
+              >
+                <option value="1">1 Column</option>
+                <option value="2">2 Columns</option>
+                <option value="3">3 Columns</option>
+                <option value="4">4 Columns</option>
+                <option value="5">5 Columns</option>
+                <option value="6">6 Columns</option>
+              </select>
+            </label>
+          </div>
+          <div class="canvas-info">
+            Canvas Size: {{ canvasWidth }}px × {{ canvasHeight }}px | Zoom: {{ Math.round(zoomLevel * 100) }}%
+          </div>
         </div>
       </div>
       
@@ -282,7 +309,40 @@
                     <button class="collapse-btn">{{ isHeaderCollapsed(page.pageNumber) ? '▼' : '▲' }}</button>
                   </div>
                 </div>
-                <div v-if="!isHeaderCollapsed(page.pageNumber)" class="svg-preview" v-html="getSVGPage(page.pageNumber).svg"></div>
+                <div v-if="!isHeaderCollapsed(page.pageNumber)" class="page-preview">
+                  <!-- Split view when both are enabled -->
+                  <div v-if="showBitmaps && showSVGs && getBitmapPage(page.pageNumber) && getSVGPage(page.pageNumber)" class="split-view-container">
+                    <div class="split-content">
+                      <!-- Bitmap layer (full width, clipped on right) -->
+                      <div class="bitmap-section" :style="{ clipPath: `inset(0 ${100 - splitPercentage}% 0 0)` }">
+                        <canvas 
+                          :ref="`layout-canvas-${page.pageNumber}`"
+                          :data-page="page.pageNumber"
+                          class="layout-bitmap-canvas"
+                        ></canvas>
+                      </div>
+                      
+                      <!-- SVG layer (full width, clipped on left) -->
+                      <div class="svg-section" :style="{ clipPath: `inset(0 0 0 ${splitPercentage}%)` }">
+                        <div class="svg-content" v-html="getSVGPage(page.pageNumber).svg"></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Bitmap only (or when SVGs don't exist yet) -->
+                  <div v-else-if="showBitmaps && getBitmapPage(page.pageNumber) && (!showSVGs || !getSVGPage(page.pageNumber))" class="bitmap-container">
+                    <canvas 
+                      :ref="`layout-canvas-${page.pageNumber}`"
+                      :data-page="page.pageNumber"
+                      class="layout-bitmap-canvas"
+                    ></canvas>
+                  </div>
+                  
+                  <!-- SVG only -->
+                  <div v-else-if="showSVGs && getSVGPage(page.pageNumber) && !showBitmaps" class="svg-container">
+                    <div v-html="getSVGPage(page.pageNumber).svg"></div>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -326,6 +386,7 @@ export default {
       columnCount: 4,
       // Layout designer properties
       reorganizing: false,
+      layoutColumnCount: 4,
       pagePositions: [],
       isDraggingPage: false,
       draggedPage: null,
@@ -496,14 +557,21 @@ export default {
     
     renderBitmapsToCanvas() {
       this.extractedPages.forEach(page => {
-        // Get all canvas elements for this page (could be in different layouts)
-        const canvasRefs = this.$refs[`canvas-${page.pageNumber}`]
+        // Get all canvas elements for this page (main view and layout designer)
+        const mainCanvasRefs = this.$refs[`canvas-${page.pageNumber}`]
+        const layoutCanvasRefs = this.$refs[`layout-canvas-${page.pageNumber}`]
         
-        if (canvasRefs && page.imageData) {
-          // Handle both single canvas and array of canvases
-          const canvases = Array.isArray(canvasRefs) ? canvasRefs : [canvasRefs]
-          
-          canvases.forEach(canvas => {
+        // Combine all canvas references
+        const allCanvasRefs = []
+        if (mainCanvasRefs) {
+          allCanvasRefs.push(...(Array.isArray(mainCanvasRefs) ? mainCanvasRefs : [mainCanvasRefs]))
+        }
+        if (layoutCanvasRefs) {
+          allCanvasRefs.push(...(Array.isArray(layoutCanvasRefs) ? layoutCanvasRefs : [layoutCanvasRefs]))
+        }
+        
+        if (allCanvasRefs.length > 0 && page.imageData) {
+          allCanvasRefs.forEach(canvas => {
             if (canvas) {
               canvas.width = page.imageData.width
               canvas.height = page.imageData.height
@@ -691,6 +759,11 @@ export default {
       this.initializePagePositions()
       // Add global keyboard listener for layout designer
       document.addEventListener('keydown', this.handleLayoutKeydown)
+      // Render bitmaps in layout designer
+      this.$nextTick(() => {
+        setTimeout(() => this.renderBitmapsToCanvas(), 100)
+        setTimeout(() => this.renderBitmapsToCanvas(), 300)
+      })
     },
     
     finishReorganization() {
@@ -721,6 +794,14 @@ export default {
       this.pagePositions.forEach((page, index) => {
         page.x = (index % cols) * 280 + 50
         page.y = Math.floor(index / cols) * 320 + 50
+      })
+    },
+    
+    reorganizeToColumns() {
+      // Arrange pages in the specified number of columns
+      this.pagePositions.forEach((page, index) => {
+        page.x = (index % this.layoutColumnCount) * 280 + 50
+        page.y = Math.floor(index / this.layoutColumnCount) * 320 + 50
       })
     },
     
@@ -835,6 +916,14 @@ export default {
         }
       },
       deep: true
+    },
+    splitPercentage() {
+      // Re-render layout designer bitmaps when split percentage changes
+      if (this.reorganizing && this.showBitmaps && this.extractedPages.length > 0) {
+        this.$nextTick(() => {
+          setTimeout(() => this.renderBitmapsToCanvas(), 50)
+        })
+      }
     }
   }
 }
@@ -1063,6 +1152,13 @@ export default {
   border: 1px solid #ddd;
   border-radius: 4px;
 }
+.layout-bitmap-canvas {
+  width: 100%;
+  height: auto;
+  max-height: 250px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
 
 .svg-container svg {
   width: 100%;
@@ -1283,6 +1379,40 @@ export default {
   font-size: 12px;
   color: #888;
   font-family: monospace;
+}
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+.header-left h3 {
+  margin: 0 0 10px 0;
+  color: #28a745;
+}
+.header-left p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+.close-button {
+  padding: 8px 16px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+}
+.close-button:hover {
+  background: #c82333;
+}
+.designer-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
 }
 
 .canvas-container {

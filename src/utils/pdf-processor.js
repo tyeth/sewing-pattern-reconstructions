@@ -1,11 +1,14 @@
 import { PDFiumLibrary } from '@hyzyla/pdfium'
+import wasmUrl from '@hyzyla/pdfium/dist/vendor/pdfium.wasm?url'
 
 let pdfiumLibrary = null
 
 export async function extractPagesFromPDF(pdfBuffer, startPage, endPage) {
   // Initialize PDFium WASM if not already done
   if (!pdfiumLibrary) {
-    pdfiumLibrary = await PDFiumLibrary.init()
+    pdfiumLibrary = await PDFiumLibrary.init({
+      wasmUrl: wasmUrl
+    })
   }
 
   // Load PDF document

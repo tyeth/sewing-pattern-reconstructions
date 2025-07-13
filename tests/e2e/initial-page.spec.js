@@ -19,4 +19,48 @@ test.describe('Initial Page', () => {
     await expect(page.locator('input[type="file"]')).toBeVisible()
     await expect(page.locator('input[type="file"]')).toHaveAttribute('accept', '.pdf')
   })
+
+  test('should upload PDF and display SVG table with pattern pages', async ({ page }) => {
+    // Listen for console errors
+    page.on('console', msg => console.log(`Browser console: ${msg.text()}`))
+    page.on('pageerror', err => console.log(`Browser error: ${err.message}`))
+    
+    await page.goto('/')
+    
+    // Upload the test PDF file
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles('tests/patterns/menspajamashortsfinal_aiid2146907_page18to37.pdf')
+    
+    // Should show page controls after upload
+    await expect(page.locator('.page-controls')).toBeVisible()
+    
+    // Should detect correct page range
+    await expect(page.locator('input[type="number"]').first()).toHaveValue('18')
+    await expect(page.locator('input[type="number"]').last()).toHaveValue('37')
+    
+    // Click process pages button
+    console.log('Clicking Process Pages button...')
+    await page.locator('button:has-text("Process Pages")').click()
+    
+    // Wait a moment for any errors to surface
+    await page.waitForTimeout(1000)
+    
+    // Should show processing indicator
+    await expect(page.locator('[data-testid="processing"]')).toBeVisible()
+    
+    // Wait for processing to complete and SVG table to appear
+    await expect(page.locator('[data-testid="svg-table"]')).toBeVisible({ timeout: 60000 })
+    
+    // Should display multiple pages in a responsive grid
+    const pageItems = page.locator('[data-testid="page-item"]')
+    await expect(pageItems).toHaveCount(20) // 20 pages from our test PDF
+    
+    // Each page should have SVG content
+    const firstPageSvg = pageItems.first().locator('svg')
+    await expect(firstPageSvg).toBeVisible()
+    
+    // Should have page number labels
+    await expect(pageItems.first().locator('[data-testid="page-number"]')).toContainText('18')
+    await expect(pageItems.last().locator('[data-testid="page-number"]')).toContainText('37')
+  })
 })
